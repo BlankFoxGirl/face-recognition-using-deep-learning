@@ -1,0 +1,6 @@
+dataset/**/*
+face_detection_model/**/*
+output/**
+*.t7
+*.DS_Store
+.vscode/**
