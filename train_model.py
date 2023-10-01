@@ -23,7 +23,7 @@ recognizer = SVC(C=1.0, kernel="linear", probability=True)
 recognizer.fit(data["embeddings"], labels)
 
 # write the actual face recognition model to disk
-f = open("output/recognizer", "wb")
+f = open("output/recognizer.pickle", "wb")
 f.write(pickle.dumps(recognizer))
 f.close()
 

@@ -1,0 +1,60 @@
+{
+    "cameras": [
+        {
+            "name": "Camera1",
+            "url": "rtmp://camera1:1935/live/camera1",
+            "ffmpeg": false,
+            "enabled": true,
+            "record": true,
+            "training": false,
+            "learning": true,
+            "fps.limit": 60,
+            "motion.sensitivity": 10000,
+            "motion.threshold": 70,
+            "motion.area.minimum": 10000,
+            "motion.area.maximum": 1000000
+        },
+        {
+            "name": "Camera2",
+            "url": "rtmp://camera2:1935/live/camera2",
+            "ffmpeg": false,
+            "enabled": true,
+            "record": true,
+            "training": false,
+            "learning": true,
+            "fps.limit": 60,
+            "motion.sensitivity": 30000,
+            "motion.threshold": 60,
+            "motion.area.minimum": 10000,
+            "motion.area.maximum": 1000000
+        },
+        {
+            "name": "Camera3",
+            "url": "rtmp://camera3:1935/live/camera3",
+            "ffmpeg": false,
+            "enabled": true,
+            "record": true,
+            "training": false,
+            "learning": true,
+            "fps.limit": 60,
+            "motion.sensitivity": 30000,
+            "motion.threshold": 60,
+            "motion.area.minimum": 10000,
+            "motion.area.maximum": 1000000
+        },
+        {
+            "name": "Camera4",
+            "url": "rtmp://camera4:1935/live/camera4",
+            "ffmpeg": false,
+            "enabled": true,
+            "record": true,
+            "training": false,
+            "learning": true,
+            "fps.limit": 60,
+            "motion.sensitivity": 20000,
+            "motion.threshold": 90,
+            "motion.area.minimum": 10000,
+            "motion.area.maximum": 1000000
+        }
+    ]
+}

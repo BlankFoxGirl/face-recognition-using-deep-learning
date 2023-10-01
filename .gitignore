@@ -4,3 +4,5 @@ output/**
 *.t7
 *.DS_Store
 .vscode/**
+captured/
+dataset.ignore

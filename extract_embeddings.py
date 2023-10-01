@@ -1,3 +1,4 @@
+#!/usr/local/bin/python
 # import libraries
 from imutils import paths
 import numpy as np
@@ -6,6 +7,10 @@ import imutils
 import pickle
 import cv2
 import os
+
+COMPARE_SIZE=100
+PROCESS_AMOUNT=500
+RUN_FRESH=False
 
 # load serialized face detector
 print("Loading Face Detector...")
@@ -24,14 +29,36 @@ imagePaths = list(paths.list_images("dataset"))
 # initialize our lists of extracted facial embeddings and corresponding people names
 knownEmbeddings = []
 knownNames = []
+imageNames = []
+
+# Load existing embeddings.
+data = pickle.loads(open("output/embeddings.pickle", "rb").read())
+
+if RUN_FRESH == True or data == None or "paths" not in data:
+	data = {"embeddings": [], "names": [], "paths": []}
+	print("Running fresh.")
 
 # initialize the total number of faces processed
 total = 0
-
+newProcessed = 0
+tooSmall = 0
+lowConfidence = 0
+noFace = 0
 # loop over the image paths
 for (i, imagePath) in enumerate(imagePaths):
+	if imagePath in data["paths"]:
+		# print("Skipping {}".format(imagePath))
+		idx = data["paths"].index(imagePath)
+		knownNames.append(data["names"][idx])
+		knownEmbeddings.append(data["embeddings"][idx])
+		imageNames.append(imagePath)
+		total += 1
+		continue
+	else:
+		newProcessed += 1
+
 	# extract the person name from the image path
-	if (i%50 == 0):
+	if (i%PROCESS_AMOUNT == 0):
 		print("Processing image {}/{}".format(i, len(imagePaths)))
 	name = imagePath.split(os.path.sep)[-2]
 
@@ -42,7 +69,7 @@ for (i, imagePath) in enumerate(imagePaths):
 
 	# construct a blob from the image
 	imageBlob = cv2.dnn.blobFromImage(
-		cv2.resize(image, (300, 300)), 1.0, (300, 300),
+		cv2.resize(image, (COMPARE_SIZE, COMPARE_SIZE)), 1.0, (COMPARE_SIZE, COMPARE_SIZE),
 		(104.0, 177.0, 123.0), swapRB=False, crop=False)
 
 	# apply OpenCV's deep learning-based face detector to localize faces in the input image
@@ -67,6 +94,9 @@ for (i, imagePath) in enumerate(imagePaths):
 
 			# ensure the face width and height are sufficiently large
 			if fW < 20 or fH < 20:
+				print("Face too small. {}W {}H - {}".format(fW, fH, imagePath))
+				os.remove(imagePath)
+				tooSmall += 1
 				continue
 
 			# construct a blob for the face ROI, then pass the blob through our face embedding model to obtain the 128-d quantification of the face
@@ -78,11 +108,21 @@ for (i, imagePath) in enumerate(imagePaths):
 			# add the name of the person + corresponding face embedding to their respective lists
 			knownNames.append(name)
 			knownEmbeddings.append(vec.flatten())
+			imageNames.append(imagePath)
 			total += 1
+		else:
+			print("Confidence too low. {} - {}".format(confidence, imagePath))
+			lowConfidence += 1
+			os.remove(imagePath)
+	else:
+		print("No faces found. {}".format(imagePath))
+		noFace += 1
+		os.remove(imagePath)
 
 # dump the facial embeddings + names to disk
 print("[INFO] serializing {} encodings...".format(total))
-data = {"embeddings": knownEmbeddings, "names": knownNames}
+data = {"embeddings": knownEmbeddings, "names": knownNames, "paths": imageNames}
 f = open("output/embeddings.pickle", "wb")
 f.write(pickle.dumps(data))
 f.close()
+print("[STATS] {} Missing Faces, {} Too Small, {} Low Confidence, {} Newly Processed, {} Total".format(noFace, tooSmall, lowConfidence, newProcessed, total))

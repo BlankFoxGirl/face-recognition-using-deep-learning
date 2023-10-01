@@ -10,7 +10,7 @@ import os
 
 # construct the argument parser and parse the arguments
 ap = argparse.ArgumentParser()
-ap.add_argument("-i", "--image", required=True, help="input image path")
+ap.add_argument("-i", "--image", required=False, help="input image path")
 args = vars(ap.parse_args())
 
 # load our serialized face detector from disk
@@ -28,7 +28,12 @@ recognizer = pickle.loads(open('output/recognizer.pickle', "rb").read())
 le = pickle.loads(open('output/le.pickle', "rb").read())
 
 # load the image, resize it to have a width of 600 pixels (while maintaining the aspect ratio), and then grab the image dimensions
-image = cv2.imread(args["image"])
+# if "image" not in args or not os.path.exists(args["image"]):
+imgPath='input.jpg'
+# else:
+	# imgPath=args["image"]
+
+image = cv2.imread(imgPath)
 image = imutils.resize(image, width=600)
 (h, w) = image.shape[:2]
 
@@ -81,5 +86,6 @@ for i in range(0, detections.shape[2]):
 			cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 255), 2)
 
 # show the output image
-cv2.imshow("Image", image)
+# cv2.imshow("Image", image)
+cv2.imwrite('output.jpg', image)
 cv2.waitKey(0)

@@ -1,0 +1,83 @@
+version: '3.1'
+
+services:
+  camera1:
+    image: camera-proxy
+    container_name: camera1
+    command: bash /app/streamKasa.sh 10.2.1.73 camera1 camera1
+    restart: unless-stopped
+    # network_mode: host
+    volumes:
+      - ./:/app
+  # listener1:
+  #   image: face-recognition
+  #   container_name: listener1
+  #   command: python /app/recognize_video.py "rtmp://camera1:1935/live/camera1" "Camera1" 15000 60 True
+  #   restart: unless-stopped
+  #   # network_mode: host
+  #   volumes:
+  #     - ./:/app:rw
+  #   depends_on:
+  #     - camera1
+  camera2:
+    image: camera-proxy
+    container_name: camera2
+    command: bash /app/streamKasa.sh 10.2.1.72 camera2 camera2
+    restart: unless-stopped
+    # network_mode: host
+    volumes:
+      - ./:/app
+  # listener2:
+  #   image: face-recognition
+  #   container_name: listener2
+  #   command: python /app/recognize_video.py "rtmp://camera2:1935/live/camera2" "Camera2" 30000 60 False
+  #   restart: unless-stopped
+  #   # network_mode: host
+  #   volumes:
+  #     - ./:/app:rw
+  #   depends_on:
+  #     - camera2
+  camera3:
+    image: camera-proxy
+    container_name: camera3
+    command: bash /app/streamKasa.sh 10.2.1.71 camera3 camera3
+    restart: unless-stopped
+    # network_mode: host
+    volumes:
+      - ./:/app
+  # listener3:
+  #   image: face-recognition
+  #   container_name: listener3
+  #   command: python /app/recognize_video.py "rtmp://camera3:1935/live/camera3" "Camera3" 30000 60 False
+  #   restart: unless-stopped
+  #   # network_mode: host
+  #   volumes:
+  #     - ./:/app:rw
+  #   depends_on:
+  #     - camera3
+  camera4:
+    image: camera-proxy
+    container_name: camera4
+    command: bash /app/streamKasa.sh 10.2.1.70 camera4 camera4
+    restart: unless-stopped
+    # network_mode: host
+    volumes:
+      - ./:/app
+  # listener4:
+  #   image: face-recognition
+  #   container_name: listener4
+  #   command: python /app/recognize_video.py "rtmp://camera4:1935/live/camera4" "Camera4" 25000 90 False
+  #   restart: unless-stopped
+  #   # network_mode: host
+  #   volumes:
+  #     - ./:/app:rw
+  #   depends_on:
+  #     - camera4
+  listener:
+    image: face-recognition
+    container_name: listener
+    command: python /app/listener.py
+    restart: unless-stopped
+    # network_mode: host
+    volumes:
+      - ./:/app:rw
