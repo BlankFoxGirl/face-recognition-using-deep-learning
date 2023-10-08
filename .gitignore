@@ -8,3 +8,4 @@ captured/
 dataset.ignore
 dataset.*.ignore
 __pycache__
+cam.env
