@@ -25,7 +25,8 @@ le = pickle.loads(open("output/le.pickle", "rb").read())
 # initialize the video stream, then allow the camera sensor to warm up
 print("Starting Video Stream...")
 # vs = VideoStream(src=0).start()
-vs = cv2.VideoCapture("rtsp://Xf6N0dIENhKR:Ha62gamgMX2f@10.2.1.202/live0", cv2.CAP_FFMPEG)
+# vs = cv2.VideoCapture("rtsp://Xf6N0dIENhKR:Ha62gamgMX2f@10.2.1.202/live0", cv2.CAP_FFMPEG)
+vs = cv2.VideoCapture("rtmp://camera1:1935/live/camera1", cv2.CAP_FFMPEG) # Kasa.
 time.sleep(2.0) # Delay to let camera warm up.
 
 # start the FPS throughput estimator
@@ -33,7 +34,7 @@ fps = FPS().start()
 print("Video Stream Started.")
 out = cv2.VideoWriter('out.avi',cv2.VideoWriter_fourcc('M','J','P','G'), 10, (1920,1080))
 # loop over frames from the video file stream
-name = 'terrence'
+name = 'sarah-allen'
 capture = False
 captureAfter = 0
 
@@ -53,8 +54,6 @@ while True:
 	if frame is None:
 		continue
 
-	# resize the frame to have a width of 600 pixels (while maintaining the aspect ratio), and then grab the image dimensions
-	# frame = imutils.resize(frame, width=600)
 	(h, w) = frame.shape[:2]
 	# h = 1080
 	# w = 1920
@@ -90,8 +89,9 @@ while True:
 	# imageBlob = cv2.dnn.blobFromImage(frame, 1.0 / 255,
 	# 	(96, 96), (0, 0, 0), swapRB=True, crop=False)
 
-
-	cv2.imwrite('dataset/{}/{}-{}-{}.jpg'.format(name, nowDateTime, name, frameIndex),frame)
+	# resize the frame to have a width of 600 pixels (while maintaining the aspect ratio), and then grab the image dimensions
+	frame = imutils.resize(frame, width=600)
+	cv2.imwrite('captured/{}/{}-{}-{}.jpg'.format(name, nowDateTime, name, frameIndex),frame)
 
 # stop the timer and display FPS information
 fps.stop()

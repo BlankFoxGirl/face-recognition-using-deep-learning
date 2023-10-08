@@ -1,3 +1,4 @@
+import os
 def slugToName(slug):
     return slug.replace("-", " ").title()
 
@@ -20,10 +21,13 @@ def pointInScaledRectangle(x, y, startX, startY, endX, endY, scale):
     newY = centerPosition["y"] - (height * scale / 2)
     newHeight = height * scale
     newWidth = width * scale
-    # print("Rect (({},{}),({},{})) scaled by {} is (({},{}),({},{})".format(startX, startY, endX, endY, scale, newX, newY, newX + newWidth, newY + newHeight))
 
     if x > newX and x < (newWidth+newX) and y > newY and y < (newY + newHeight):
-        # print("Point ({}x, {}y) is within scaled rect".format(x, y))
         return True
-    # print("Point ({}x, {}y) is outside of scaled rect".format(x, y))
     return False
+
+
+def createRecursivePath(path):
+    if not os.path.exists(path):
+        os.makedirs(path)
+    return path

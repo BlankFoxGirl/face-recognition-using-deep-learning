@@ -4,7 +4,7 @@ import os, datetime
 import cv2, uuid, json
 import imutils
 import time, sys
-import pickle
+import pickle, face_recognition
 import numpy as np
 import motion_detection as mp
 import utilities, video, quadrants
@@ -145,13 +145,42 @@ def cleanupStaleSignatures():
     for signature in signaturesToClear:
         del motionSignatures[signature]
 
+def getSignaturesFromMotion(motion):
+    global motionSignatures
+    signatures = []
+    for m in motionSignatures:
+        identifiedMotion = None
+        if "quadrants" in motionSignatures[m]:
+            for mot in motion:
+                # do.
+                cq = quadrants.centerQuadrant(motionSignatures[m]["quadrants"])
+                if (quadrants.rectangleOccupiesQuadrant(cq, mot["startX"], mot["startY"], mot["endX"] - mot["startX"], mot["endY"] - mot["startY"]) == True):
+                    identifiedMotion = mot
+                    break
+
+        if identifiedMotion is not None:
+            signatures.append({
+                "signatureId": m,
+                "motion": identifiedMotion
+            })
+    return signatures
+
+def peopleInSignatures(signatures):
+    people = []
+    for sig in signatures:
+        if "people" not in motionSignatures[sig["signatureId"]]:
+            continue
+        for person in motionSignatures[sig["signatureId"]]["people"]:
+            if person not in people:
+                people.append(person)
+    return people
+
 def getMotionSignature(x, y, w, h):
     global motionSignatures
     triggeredQuadrants = quadrants.quadrantsInRectangle(x, y, w, h)
     for signature in motionSignatures:
         centerQuadrant = quadrants.centerQuadrant(triggeredQuadrants)
         if centerQuadrant in motionSignatures[signature]["quadrants"]:
-            updateSignature(motionSignatures[signature])
             motionSignatures[signature]["people"] = cleanUpPeople(motionSignatures[signature]["people"])
             motionSignatures[signature]["quadrants"] = triggeredQuadrants
             motionSignatures[signature]["x"] = x
@@ -159,6 +188,10 @@ def getMotionSignature(x, y, w, h):
             motionSignatures[signature]["w"] = w
             motionSignatures[signature]["h"] = h
             motionSignatures[signature]["rect"] = quadrants.rectFromQuadrants(motionSignatures[signature]["quadrants"])
+            updateSignature(motionSignatures[signature])
+
+            if "rect" not in motionSignatures[signature] or motionSignatures[signature]["rect"]["viewportPercent"] >= 30: # Filter out unrealistic.
+                continue
 
             print(motionSignatures[signature])
             return motionSignatures[signature]
@@ -177,22 +210,28 @@ def getMotionSignature(x, y, w, h):
         "people": {}
     }
 
+    if newSig["rect"]["viewportPercent"] > 30: # Filter out unrealistic movement.
+        return None
+
     updateSignature(newSig)
     print("[MOTION] Signature {} created".format(newSig["uuid"]))
     return newSig
 
 def updateSignature(signature):
     global motionSignatures
+
+    if len(signature["people"]) > 0:
+        signature["hits"] += 1
+        signature["lastSeen"] = datetime.datetime.now()
+
     if signature["uuid"] not in motionSignatures:
         motionSignatures[signature["uuid"]] = signature
         return
 
-    signature["hits"] += 1
-    signature["lastSeen"] = datetime.datetime.now()
     motionSignatures[signature["uuid"]] = signature
 
-def handleDetections(frame, detections, signature, sourceFrame=None, offsetX=0, offsetY=0):
-    global trainingImagesCaptured, peopleFound
+def handleDetections(frame, detections, signature, sourceFrame=None, offsetX=0, offsetY=0, motion={}):
+    global trainingImagesCaptured, peopleFound, knownData
     for idx, detection in enumerate(detections[1]):
         confidence = detection[-1]
         startX = int(detection[0])
@@ -217,44 +256,42 @@ def handleDetections(frame, detections, signature, sourceFrame=None, offsetX=0, 
             continue
 
         identified = False
-        # Check if the face is inside a person boundary.
-        # person = rectangleInsidePersonBoundary(startX, startY, endX, endY)
-        # person = detectedInPersonMotionBoundary(offsetX, offsetY, offsetX + mW, offsetY + mH)
-        # if person is not None:
-        #     # print("Face inside {}'s boundary.".format(person["name"]))
-        #     person["hits"] += 1
-        #     person["startX"] = startX-CONTAINER_PADDING+offsetX
-        #     person["startY"] = startY-CONTAINER_PADDING+offsetY
-        #     person["endX"] = endX+CONTAINER_PADDING+offsetX
-        #     person["endY"] = endY+CONTAINER_PADDING+offsetY
-        #     identified = True
-
-        #     continue
-
-        # construct a blob for the face ROI, then pass the blob through our face embedding model to obtain the 128-d quantification of the face
-        try:
-            faceBlob = cv2.dnn.blobFromImage(face, 1.0 / 255,
-            (96, 96), (0, 0, 0), swapRB=True, crop=False)
-        except:
-            print("[DETECT] Failed to create faceBlob at {}x{} - {}x{}".format(startX, startY, endX, endY))
-            continue
-
+ 
         if TRAINING_MODE==True:
             captureTrainingImage(frame, startX, startY, endX, endY, 0, 'TRAINING')
             trainingImagesCaptured += 1
             print("[TRAINING_MODE] Captured image #{}".format(trainingImagesCaptured))
             continue
 
-        embedder.setInput(faceBlob)
-        vec = embedder.forward()
+        small_frame = cv2.resize(frame if sourceFrame is None else sourceFrame, (0, 0), fx=0.25, fy=0.25)
 
-        # perform classification to recognize the face
-        preds = recognizer.predict_proba(vec)[0]
-        j = np.argmax(preds)
-        proba = preds[j]
-        name = le.classes_[j]
+        # Convert the image from BGR color (which OpenCV uses) to RGB color (which face_recognition uses)
+        rgb_small_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
+        
+        # Find all the faces and face encodings in the current frame of video
+        face_locations = face_recognition.face_locations(rgb_small_frame)
+        if len(face_locations) == 0:
+            continue
 
-        if (name == 'not-a-face'):
+        if rgb_small_frame is None:
+            continue
+
+        encodings = face_recognition.face_encodings(rgb_small_frame, face_locations, model="large")
+        name = "unknown"
+        proba = 0.7
+
+        for faceEnc in encodings:
+            matches = face_recognition.compare_faces(knownData["embeddings"], faceEnc, tolerance=0.6)
+            face_distances = face_recognition.face_distance(knownData["embeddings"], faceEnc)
+            best_match_index = np.argmin(face_distances)
+            if matches[best_match_index]:
+                name = knownData["names"][best_match_index]
+                proba = 1.0
+                break
+
+        sigs = getSignaturesFromMotion(motion)
+        people = peopleInSignatures(sigs)
+        if (name != "unknown" and (name == 'not-a-face' or name in people)):
             continue
 
         if (name in peopleConfig["people"]):
@@ -275,6 +312,9 @@ def handleDetections(frame, detections, signature, sourceFrame=None, offsetX=0, 
 
         if sourceFrame is None:
             signature = getMotionSignature(startX, startY, endX, endY)
+
+        if signature == None:
+            continue
 
         peopleFound = signature["people"]
         if name in peopleFound: # Update last seen, but do not notify.
@@ -301,7 +341,7 @@ def handleDetections(frame, detections, signature, sourceFrame=None, offsetX=0, 
                 if (name in peopleConfig["people"]):
                     if peopleConfig["people"][name]["skip-snapshot"] == True:
                         continue
-                frame = video.drawInFrame(frame if sourceFrame is None else sourceFrame, peopleFound, DRAW_FACE_BOXES, IDENTITY_FRAME_HITS, peopleConfig)
+                frame = video.drawInFrame(frame if sourceFrame is None else sourceFrame, [], peopleFound, DRAW_FACE_BOXES, IDENTITY_FRAME_HITS, peopleConfig)
                 filename='captured/Snapshots/{}_{}_{}_{:.0f}.jpg'.format(MY_ID, name, now.strftime("%Y%m%d%H%M%S"), proba * 10000)
                 print("[TRACKING_START] [{}] ({:.2f}%) {}'s Face detected at ({}x,{}y) - ({}x,{}y), confidence: {} (File: {})".format(nowDateTime, proba * 100, name, startX, startY, endX, endY, confidence, filename))
                 cv2.imwrite(filename,frame)
@@ -337,11 +377,13 @@ detector = cv2.FaceDetectorYN.create(
 
 # load serialized face embedding model
 print("[WAIT] Loading Face Recognizer...")
-embedder = cv2.dnn.readNetFromTorch("openface_nn4.small2.v1.t7")
+# embedder = cv2.dnn.readNetFromTorch("openface_nn4.small2.v1.t7")
 
-# load the actual face recognition model along with the label encoder
-recognizer = pickle.loads(open("output/recognizer.pickle", "rb").read())
-le = pickle.loads(open("output/le.pickle", "rb").read())
+# # load the actual face recognition model along with the label encoder
+# recognizer = pickle.loads(open("output/recognizerv2.pickle", "rb").read())
+# le = pickle.loads(open("output/lev2.pickle", "rb").read())
+
+knownData = pickle.loads(open("output/embeddingsv2.pickle", "rb").read())
 
 # initialize the video stream, then allow the camera sensor to warm up
 print("[WAIT] Starting Video Stream...")
@@ -349,7 +391,7 @@ print("[WAIT] Starting Video Stream...")
 # vs = cv2.VideoCapture("rtsp://Xf6N0dIENhKR:Ha62gamgMX2f@10.2.1.202/live0", cv2.CAP_FFMPEG) # Eufy
 
 # os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'rtsp_transport;udp'
-vs = cv2.VideoCapture(INPUT_FILE, cv2.CAP_FFMPEG) # Kasa.
+vs = cv2.VideoCapture(INPUT_FILE) # Kasa.
 # vs = cv2.VideoCapture("dianne.mp4")
 vs.set(cv2.CAP_PROP_POS_MSEC, 1)
 
@@ -359,6 +401,7 @@ time.sleep(2.0)
 fps = FPS().start()
 print("[READY] Video Stream Started.")
 out = None
+out2 = None
 # loop over frames from the video file stream
 peopleConfig = json.load(open("dataset/config.json"))
 peopleFound = {}
@@ -369,9 +412,14 @@ timeoutMotion = 0
 trainingImagesCaptured=0
 frameCounter=0
 motionBg=None
+firstFrame=None
 
 # Limit FPS to 60FPS.
 while vs.isOpened():
+    if out is None:
+        out = video.startRecording("tmp-{}".format(time.time()), out, 1920, 1080, True)
+    if out2 is None:
+        out2 = video.startRecording("tmp-actual-{}".format(time.time()), out2, 1920, 1080, True)
     # time.sleep(1/FPS_LIMIT)
     # grab the frame from the threaded video stream
     ret, frame = vs.read()
@@ -385,6 +433,17 @@ while vs.isOpened():
         continue
 
     frameCounter += 1
+    if firstFrame is None:
+        firstFrame = frame
+        continue
+
+    sigFrame = mp.getSignatureFrame(frame, firstFrame)
+    out.write(sigFrame)
+    out2.write(frame)
+    # out = video.writeFrame(sigFrame, [], out, {}, True, False, 900, {})
+    if frameCounter % 30 == 1:
+        print("Frame write")
+    continue
     motion = getMotion(frame)
 
     if frameCounter % 30 == 1:
@@ -406,43 +465,49 @@ while vs.isOpened():
 
     (h, w) = frame.shape[:2]
 
-    if mp.isMotionDetectedIn(motion) == True:
-    # Extract movement from frame.
-        for idx, m in enumerate(motion):
-            # print("[MOTION] Motion detected at {}x,{}y - {}x,{}y".format(m["startX"], m["startY"], m["endX"], m["endY"]))
-            movementFrame = frame.copy()
-            movementFrame = movementFrame[(motion[idx]["startY"] * 4):(motion[idx]["endY"]*4), (motion[idx]["startX"] * 4):(motion[idx]["endX"] * 4)]
+    # if mp.isMotionDetectedIn(motion) == True:
+        
+    # # Extract movement from frame.
+    #     for idx, m in enumerate(motion):
+    #         # print("[MOTION] Motion detected at {}x,{}y - {}x,{}y".format(m["startX"], m["startY"], m["endX"], m["endY"]))
+    #         movementFrame = frame.copy()
+    #         movementFrame = movementFrame[(m["startY"] * 4):(m["endY"]*4), (m["startX"] * 4):(m["endX"] * 4)]
 
-            (mH, mW) = movementFrame.shape[:2]
+    #         (mH, mW) = movementFrame.shape[:2]
 
-            if mW < MINIMUM_MOTION_SIZE or mH < MINIMUM_MOTION_SIZE:
-                continue
+    #         if mW < MINIMUM_MOTION_SIZE or mH < MINIMUM_MOTION_SIZE:
+    #             continue
 
-            signature = getMotionSignature((motion[idx]["startX"] * 4), (motion[idx]["startY"] * 4), (motion[idx]["endX"] * 4), (motion[idx]["endY"] * 4))
-            if len(signature["people"]) > 0:
-                continue
+    #         signature = getMotionSignature((m["startX"] * 4), (m["startY"] * 4), (m["endX"] * 4), (m["endY"] * 4))
+    #         if signature is None:
+    #             continue
 
-            # apply OpenCV's deep learning-based face detector to localize faces in the input image
-            detector.setInputSize((mW, mH))
-            detections = detector.detect(movementFrame)
-            if detections[1] is not None:
-                handleDetections(movementFrame, detections, signature, sourceFrame=frame, offsetX=m["startX"]*4, offsetY=m["startY"]*4)
-            # else:
-            #     # print("[MOTION] No faces detected in movement frame.")
-            #     person=detectedInPersonMotionBoundary(m["startX"], m["startY"], m["endX"], m["endY"])
-            #     if person is not None:
-            #         print("[MOTION] Inferring person {} at location (({},{}),({},{})).".format(person["name"], m["startX"], m["startY"], m["endX"], m["endY"]))
-    else:
-        detector.setInputSize((INPUT_WIDTH, INPUT_HEIGHT))
-        detections = detector.detect(frame)
+    #         if len(signature["people"]) > 0:
+    #             continue
 
-        if detections[1] is not None:
-            print("[DETECT] {} faces detected.".format(len(detections[1])))
-            handleDetections(frame, detections, {})
+    #         # apply OpenCV's deep learning-based face detector to localize faces in the input image
+    #         detector.setInputSize((mW, mH))
+    #         detections = detector.detect(movementFrame)
+    #         if detections[1] is not None:
+    #             handleDetections(movementFrame, detections, signature, sourceFrame=frame, offsetX=m["startX"]*4, offsetY=m["startY"]*4)
+    #         # else:
+    #         #     # print("[MOTION] No faces detected in movement frame.")
+    #         #     person=detectedInPersonMotionBoundary(m["startX"], m["startY"], m["endX"], m["endY"])
+    #         #     if person is not None:
+    #         #         print("[MOTION] Inferring person {} at location (({},{}),({},{})).".format(person["name"], m["startX"], m["startY"], m["endX"], m["endY"]))
+    # else:
+    # if frameCounter % 5 == 1:
+        # apply OpenCV's deep learning-based face detector to localize faces in the input image
+    detector.setInputSize((INPUT_WIDTH, INPUT_HEIGHT))
+    detections = detector.detect(frame)
+
+    if detections[1] is not None:
+        print("[DETECT] {} faces detected.".format(len(detections[1])))
+        handleDetections(frame, detections, {}, motion=motion)
 
     # update the FPS counter
     fps.update()
-    out = video.writeFrame(frame, motion, out, motionSignatures, RECORD_VIDEO, DRAW_FACE_BOXES, IDENTITY_FRAME_HITS, peopleConfig)
+    # out = video.writeFrame(frame, motion, out, motionSignatures, RECORD_VIDEO, DRAW_FACE_BOXES, IDENTITY_FRAME_HITS, peopleConfig)
     # show the output frame
     # cv2.imshow("Frame", frame)
     # out.write(frame)

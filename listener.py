@@ -1,6 +1,9 @@
-import os, subprocess, datetime, time, json
+import subprocess, time, json
+import log
 listenerProcesses = {}
 CONFIG_FILE="listener.config.json"
+PROCESS_FILE="/app/recognise_video_phase1.py"
+
 running = True
 
 def startCamera(camera):
@@ -12,16 +15,28 @@ def startCamera(camera):
         else:
             return
 
-    print("[CAMERA] Starting camera {}.".format(cameraName))
-    cameraProcess = subprocess.Popen(["python", "/app/recognize_video.py", camera["url"], cameraName, str(camera["motion.sensitivity"]), str(camera["motion.threshold"]), str("True" if camera["record"] else "False")])
+    log.debug("[CAMERA] Starting camera {}.".format(cameraName))
+    args = [
+        "python",
+        PROCESS_FILE,
+        "-i",
+        camera["url"],
+        "-n",
+        cameraName,
+        "-s",
+        str(camera["motion.sensitivity"]),
+        "-t",
+        str(camera["motion.threshold"]),
+        "-r",
+        str("True" if camera["record"] else "False")
+    ]
+    cameraProcess = subprocess.Popen(args)
     listenerProcesses[cameraName] = cameraProcess
 
 def startCameras(config):
     for camera in config["cameras"]:
         if camera["enabled"] == True:
             startCamera(camera)
-        else:
-            print("Camera {} is not enabled".format(camera["name"]))
 
 config = json.load(open(CONFIG_FILE))
 
@@ -29,6 +44,4 @@ while running == True:
     time.sleep(5)
     startCameras(config)
 
-
-
-print("Listener end")
+log.info("Listener end")
