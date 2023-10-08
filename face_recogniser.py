@@ -16,23 +16,26 @@ def getRecognisedFaces(
         offsetY=0,
         MIN_FACE_WIDTH=20,
         MIN_FACE_HEIGHT=20,
+        UP_SAMPLE_MULTIPLIER=1
     ):
     recognisedFaces = []
     if detections[1] is None:
         return recognisedFaces
     for idx, detection in enumerate(detections[1]):
         confidence = detection[-1]
-        startX = int(detection[0])
-        startY = int(detection[1])
-        endX = int(detection[0]) + int(detection[2])
-        endY = int(detection[1]) + int(detection[3])
+        startX = int(detection[0]) * UP_SAMPLE_MULTIPLIER
+        startY = int(detection[1]) * UP_SAMPLE_MULTIPLIER
+        endX = (int(detection[0]) + int(detection[2])) * UP_SAMPLE_MULTIPLIER
+        endY = (int(detection[1]) + int(detection[3])) * UP_SAMPLE_MULTIPLIER
 
         if confidence < 0.6:
+            log.info("[DETECT] Confidence too low at ({}x,{}y),({}x,{}y) {}".format(startX, startY, endX, endY, confidence))
             continue
 
         # extract the face ROI
         face = frame[startY:endY, startX:endX]
         if face is None:
+            log.info("[DETECT] Couldn't extract face from frame with ({}x,{}y),({}x,{}y)".format(startX, startY, endX, endY))
             continue
 
         (fH, fW) = face.shape[:2]
@@ -40,7 +43,7 @@ def getRecognisedFaces(
 
         # ensure the face width and height are sufficiently large
         if fW < MIN_FACE_WIDTH or fH < MIN_FACE_HEIGHT:
-            log.debug("[DETECT] Face too small. {}W {}H".format(fW, fH))
+            log.info("[DETECT] Face too small. {}W {}H".format(fW, fH))
             continue
 
         # construct a blob for the face ROI, then pass the blob through our face embedding model to obtain the 128-d quantification of the face

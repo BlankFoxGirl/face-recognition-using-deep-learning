@@ -129,7 +129,7 @@ def getGrey(frame):
     gray = cv2.GaussianBlur(gray, (21, 21), 0)
     return gray
 
-def getMotion(frame, motionBg, sensitivity=MOTION_SENSITIVITY, threashold=30, CONTAINER_PADDING=20):
+def getMotion(frame, motionBg, sensitivity=MOTION_SENSITIVITY, MIN_MOTION_AREA=5, MAX_MOTION_AREA=10, threshold=30, CONTAINER_PADDING=20):
     global lastFrame
     # Initializing motion (no motion)
     motion = []
@@ -153,8 +153,8 @@ def getMotion(frame, motionBg, sensitivity=MOTION_SENSITIVITY, threashold=30, CO
   
     # If change in between static background and
     # current frame is greater than 30 it will show white color(255)
-    thresh_frame = cv2.threshold(diff_frame, threashold, 255, cv2.THRESH_BINARY)[1]
-    thresh_frame = cv2.dilate(thresh_frame, None, iterations = 2)
+    thresh_frame = cv2.threshold(diff_frame, threshold, 255, cv2.THRESH_BINARY)[1]
+    thresh_frame = cv2.dilate(thresh_frame, None, iterations = 1)
 
     # if lastFrame is not None:
     #     thresh_frame = cv2.absdiff(lastFrame, thresh_frame)
@@ -169,9 +169,10 @@ def getMotion(frame, motionBg, sensitivity=MOTION_SENSITIVITY, threashold=30, CO
              cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     for contour in cnts:
-        if cv2.contourArea(contour) < sensitivity:
+        if cv2.contourArea(contour) < MIN_MOTION_AREA or cv2.contourArea(contour) > MAX_MOTION_AREA:
             continue
 
+        log.debug("Motion detected with area {}".format(cv2.contourArea(contour)))
         (x, y, w, h) = cv2.boundingRect(contour)
         motion.append({
             "startX": max(x - CONTAINER_PADDING, 0),

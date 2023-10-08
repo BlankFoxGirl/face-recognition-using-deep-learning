@@ -1,8 +1,14 @@
 import sys, datetime
 DEBUG=False
+id=None
+
+def setId(newId):
+    global id
+    id=newId
 
 def write(m):
-    print("[{}]{}".format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), m))
+    global id
+    print("[{}.{}]{}".format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), id, m))
     sys.stdout.flush()
 
 def debug(m):

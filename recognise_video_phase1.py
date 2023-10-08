@@ -12,6 +12,7 @@ import numpy as np
 import motion_detection as mp
 import face_recogniser as fr
 from imutils.video import FPS
+import concurrent.futures
 
 ACCURACY_THREASHOLD=0.98
 COMPARE_SIZE=100
@@ -27,6 +28,8 @@ MY_ID="Test"
 MOTION_SENSITIVITY=10000
 MOTION_THRESHOLD=60
 MOTION_TIMEOUT=15
+MIN_MOTION_AREA=10000
+MAX_MOTION_AREA=50000
 MINIMUM_MOTION_SIZE=20
 IDENTITY_FRAME_HITS=3
 INPUT_HEIGHT=1080
@@ -37,8 +40,9 @@ INPUT_FILE="rtmp://10.2.1.143:1935/live/app"
 parser = argparse.ArgumentParser()
 parser.add_argument('--input', '-i', help="Input, must be a URL or File.", type=str, default=INPUT_FILE)
 parser.add_argument('--name', '-n', help="Name of the listener identity", type=str, default="Test")
-parser.add_argument('--motion-sensitivity', '-s', help="Motion Sensitivity", type=int, default=10000)
 parser.add_argument('--motion-threshold', '-t', help="Motion Threshold", type=int, default=60)
+parser.add_argument('--motion-min-area', help="Min area of motion box.", type=int, default=10000)
+parser.add_argument('--motion-max-area', help="Max area of motion box.", type=int, default=50000)
 parser.add_argument('--record-video', '-r', help="Record Video", type=bool, default=True)
 parser.add_argument('--draw-face-boxes', '-d', help="Draw Face Boxes", type=bool, default=False)
 parser.add_argument('--training-mode', '-l', help="Training Mode aka Learning Mode", type=bool, default=False)
@@ -46,11 +50,14 @@ ARGS=parser.parse_args()
 
 INPUT_FILE = ARGS.input
 MY_ID = ARGS.name
-MOTION_SENSITIVITY = ARGS.motion_sensitivity
 MOTION_THRESHOLD = ARGS.motion_threshold
 RECORD_VIDEO = ARGS.record_video
 DRAW_FACE_BOXES = ARGS.draw_face_boxes
 TRAINING_MODE = ARGS.training_mode
+MIN_MOTION_AREA = ARGS.motion_min_area
+MAX_MOTION_AREA = ARGS.motion_max_area
+
+log.setId(MY_ID)
 
 # Methods
 def captureSnapshot(frame, person, proba, name, nowDateTime, PATH):
@@ -69,7 +76,7 @@ def getMotion(frame):
         motionBg = mp.getGrey(frame)
         return []
 
-    return mp.getMotion(frame, motionBg, MOTION_SENSITIVITY, MOTION_THRESHOLD, CONTAINER_PADDING)
+    return mp.getMotion(frame, motionBg, MIN_MOTION_AREA=MIN_MOTION_AREA, MAX_MOTION_AREA=MAX_MOTION_AREA, threshold=MOTION_THRESHOLD, CONTAINER_PADDING=CONTAINER_PADDING)
 
 def captureTrainingImage(frame, startX, startY, endX, endY, proba, name, PATH=None):
     if proba < 0.96 and CAPTURE_UNKNOWNS == False:
@@ -92,13 +99,15 @@ def captureTrainingImage(frame, startX, startY, endX, endY, proba, name, PATH=No
         log.exception("[TRAINING] Failed to write image {} - {}".format(imageName, e))
         log.error("({}x,{}y) - ({}x,{}y) {} {}".format(startX, startY, endX, endY, proba, name))
 
+# This will be put into it's own worker which reads from a queue.
 def handleDetections(frame, detections, embedder, recognizer, le, sourceFrame=None, offsetX=0, offsetY=0):
     global peopleConfig
-    faces = fr.getRecognisedFaces(frame, detections, embedder, recognizer, le, peopleConfig, offsetX, offsetY)
+    faces = fr.getRecognisedFaces(frame, detections, embedder, recognizer, le, peopleConfig, offsetX, offsetY, UP_SAMPLE_MULTIPLIER=4)
     now = datetime.datetime.now()
     nowDateTime = now.strftime("%Y-%m-%d_%H-%M")
-    p = utilities.createRecursivePath("captured/{}/{}/{}/{}/{}".format(now.strftime("%Y"), now.strftime("%m"), now.strftime("%d"), now.strftime("%H"), now.strftime("%M")))
+    p = utilities.createRecursivePath("captured/{}/{}/{}/{}/{}/{}".format(MY_ID, now.strftime("%Y"), now.strftime("%m"), now.strftime("%d"), now.strftime("%H"), now.strftime("%M")))
     # Loop through faces, if the face is below probability then capture training image otherwise write a meta file to the captured directory.
+    log.debug("Found {} faces".format(len(faces)))
     for face in faces:
         fileName = '{}/{}_{}_{}.json'.format(p, MY_ID, face["name"], nowDateTime)
         if os.path.exists(fileName) == True:
@@ -137,7 +146,7 @@ le = pickle.loads(open("output/le.pickle", "rb").read())
 # initialize the video stream, then allow the camera sensor to warm up
 log.info("[WAIT] Starting Video Stream...")
 
-vs = cv2.VideoCapture(INPUT_FILE) # Kasa.
+vs = cv2.VideoCapture(INPUT_FILE, cv2.CAP_FFMPEG) # Kasa.
 vs.set(cv2.CAP_PROP_POS_MSEC, 1)
 
 time.sleep(2.0)
@@ -156,6 +165,7 @@ timeoutMotion = 0
 trainingImagesCaptured=0
 frameCounter=0
 motionBg=None
+executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
 
 while vs.isOpened():
     # grab the frame from the threaded video stream
@@ -181,10 +191,13 @@ while vs.isOpened():
         timeoutMotion = time.time() + MOTION_TIMEOUT
 
     (h, w) = frame.shape[:2]
+    quaterWidth = int(w / 4)
+    quaterHeight = int(h / 4)
 
     if mp.isMotionDetectedIn(motion) == True:
     # Extract movement from frame.
         log.debug("[MOTION] Motion detected.")
+        validMotion = 0
         for idx, m in enumerate(motion):
             movementFrame = frame.copy()
             movementFrame = movementFrame[((motion[idx]["startY"] + CONTAINER_PADDING) * 4):((motion[idx]["endY"] - CONTAINER_PADDING)*4), ((motion[idx]["startX"] + CONTAINER_PADDING) * 4):((motion[idx]["endX"] - CONTAINER_PADDING) * 4)]
@@ -193,11 +206,24 @@ while vs.isOpened():
 
             if mW < MINIMUM_MOTION_SIZE or mH < MINIMUM_MOTION_SIZE:
                 continue
+            validMotion += 1
 
+        if validMotion > 0:
             # apply OpenCV's deep learning-based face detector to localize faces in the input image
-            detections = fr.getDetectedFaces(detector, frame)
+
+            detectFrame = imutils.resize(frame, width=quaterWidth, height=quaterHeight)
+            detections = fr.getDetectedFaces(detector, detectFrame)
             if detections[1] is not None:
-                handleDetections(frame, detections, embedder, recognizer, le)
+                log.debug("Detected {} faces with motion.".format(len(detections[1])))
+                executor.submit(handleDetections, frame, detections, embedder, recognizer, le)
+                # handleDetections(frame, detections, embedder, recognizer, le)
+    elif (out is not None): # If we are recording, but haven't detected active motion in this frame, still run face detection.
+        # apply OpenCV's deep learning-based face detector to localize faces in the input image
+        detectFrame = imutils.resize(frame, width=quaterWidth, height=quaterHeight)
+        detections = fr.getDetectedFaces(detector, detectFrame)
+        if detections[1] is not None:
+            log.debug("Detected {} faces without motion.".format(len(detections[1])))
+            executor.submit(handleDetections, frame, detections, embedder, recognizer, le)
 
     # update the FPS counter
     fps.update()

@@ -23,12 +23,14 @@ def startCamera(camera):
         camera["url"],
         "-n",
         cameraName,
-        "-s",
-        str(camera["motion.sensitivity"]),
         "-t",
         str(camera["motion.threshold"]),
         "-r",
-        str("True" if camera["record"] else "False")
+        str("True" if camera["record"] else "False"),
+        '--motion-min-area',
+        str(camera["motion.area.minimum"]),
+        '--motion-max-area',
+        str(camera["motion.area.maximum"]),
     ]
     cameraProcess = subprocess.Popen(args)
     listenerProcesses[cameraName] = cameraProcess

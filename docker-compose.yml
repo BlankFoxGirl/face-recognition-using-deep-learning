@@ -10,24 +10,24 @@ services:
   #     - cam.env
   #   volumes:
   #     - ./:/app
-  # camera2:
-  #   image: camera-proxy
-  #   container_name: camera2
-  #   command: bash /app/streamKasa.sh 10.2.1.72 camera2 camera2
-  #   restart: unless-stopped
-  #   env_file:
-  #     - cam.env
-  #   volumes:
-  #     - ./:/app
-  # camera3:
-  #   image: camera-proxy
-  #   container_name: camera3
-  #   command: bash /app/streamKasa.sh 10.2.1.71 camera3 camera3
-  #   restart: unless-stopped
-  #   env_file:
-  #     - cam.env
-  #   volumes:
-  #     - ./:/app
+  camera2:
+    image: camera-proxy
+    container_name: camera2
+    command: bash /app/streamKasa.sh 10.2.1.72 camera2 camera2
+    restart: unless-stopped
+    env_file:
+      - cam.env
+    volumes:
+      - ./:/app
+  camera3:
+    image: camera-proxy
+    container_name: camera3
+    command: bash /app/streamKasa.sh 10.2.1.71 camera3 camera3
+    restart: unless-stopped
+    env_file:
+      - cam.env
+    volumes:
+      - ./:/app
   camera4:
     image: camera-proxy
     container_name: camera4

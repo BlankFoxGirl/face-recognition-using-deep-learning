@@ -22,4 +22,4 @@ printout() {
     exit
 }
 
-curl -k -s -u $USER_VALUE --ignore-content-length "https://$CAM_IP:19443/https/stream/mixed?video=h264&audio=g711&resolution=hd&deviceId=ASDASDASD" --output - | ffmpeg -stream_loop -1 -hide_banner -i - -c copy -tune zerolatency -f flv -flvflags no_duration_filesize -listen 1 rtmp://$MY_IP:1935/live/$CAM_NAME
+curl -k -s -u $USER_VALUE --ignore-content-length "https://$CAM_IP:19443/https/stream/mixed?video=h264&audio=g711&resolution=hd&deviceId=ASDASDASD" --output - | ffmpeg -hide_banner -i - -c copy -f flv -muxdelay 1 -flvflags no_duration_filesize -listen 1 rtmp://$MY_IP:1935/live/$CAM_NAME

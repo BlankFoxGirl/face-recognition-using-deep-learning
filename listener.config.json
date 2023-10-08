@@ -18,29 +18,29 @@
             "name": "Camera2",
             "url": "rtmp://camera2:1935/live/camera2",
             "ffmpeg": false,
-            "enabled": false,
+            "enabled": true,
             "record": true,
             "training": false,
             "learning": true,
             "fps.limit": 60,
-            "motion.sensitivity": 30000,
-            "motion.threshold": 60,
-            "motion.area.minimum": 10000,
-            "motion.area.maximum": 1000000
+            "motion.sensitivity": 5000,
+            "motion.threshold": 80,
+            "motion.area.minimum": 1000,
+            "motion.area.maximum": 4000
         },
         {
             "name": "Camera3",
             "url": "rtmp://camera3:1935/live/camera3",
             "ffmpeg": false,
-            "enabled": false,
+            "enabled": true,
             "record": true,
             "training": false,
             "learning": true,
             "fps.limit": 60,
-            "motion.sensitivity": 30000,
-            "motion.threshold": 60,
-            "motion.area.minimum": 10000,
-            "motion.area.maximum": 1000000
+            "motion.sensitivity": 5000,
+            "motion.threshold": 80,
+            "motion.area.minimum": 1000,
+            "motion.area.maximum": 10000
         },
         {
             "name": "Camera4",
@@ -52,9 +52,9 @@
             "learning": true,
             "fps.limit": 60,
             "motion.sensitivity": 2000,
-            "motion.threshold": 60,
-            "motion.area.minimum": 10000,
-            "motion.area.maximum": 1000000
+            "motion.threshold": 80,
+            "motion.area.minimum": 1500,
+            "motion.area.maximum": 5000
         }
     ]
 }
