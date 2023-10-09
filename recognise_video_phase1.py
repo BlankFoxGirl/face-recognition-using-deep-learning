@@ -13,6 +13,7 @@ import motion_detection as mp
 import face_recogniser as fr
 from imutils.video import FPS
 import concurrent.futures
+import paho.mqtt.client as paho
 
 ACCURACY_THREASHOLD=0.98
 COMPARE_SIZE=100
@@ -43,7 +44,7 @@ parser.add_argument('--name', '-n', help="Name of the listener identity", type=s
 parser.add_argument('--motion-threshold', '-t', help="Motion Threshold", type=int, default=60)
 parser.add_argument('--motion-min-area', help="Min area of motion box.", type=int, default=10000)
 parser.add_argument('--motion-max-area', help="Max area of motion box.", type=int, default=50000)
-parser.add_argument('--record-video', '-r', help="Record Video", type=bool, default=True)
+parser.add_argument('--record-video', '-r', help="Record Video", type=int, default=1)
 parser.add_argument('--draw-face-boxes', '-d', help="Draw Face Boxes", type=bool, default=False)
 parser.add_argument('--training-mode', '-l', help="Training Mode aka Learning Mode", type=bool, default=False)
 ARGS=parser.parse_args()
@@ -51,13 +52,36 @@ ARGS=parser.parse_args()
 INPUT_FILE = ARGS.input
 MY_ID = ARGS.name
 MOTION_THRESHOLD = ARGS.motion_threshold
-RECORD_VIDEO = ARGS.record_video
+RECORD_VIDEO = True if ARGS.record_video == 1 else False
 DRAW_FACE_BOXES = ARGS.draw_face_boxes
 TRAINING_MODE = ARGS.training_mode
 MIN_MOTION_AREA = ARGS.motion_min_area
 MAX_MOTION_AREA = ARGS.motion_max_area
 
 log.setId(MY_ID)
+
+broker="mqtt"
+port=1883
+
+def on_publish(client, userdata, result):
+    # print(userdata)
+    log.debug("Data published.")
+
+client= paho.Client(MY_ID)
+client.on_publish = on_publish
+log.info("[START] Connecting to broker {}:{}".format(broker,port))
+client.connect(broker, port)
+log.info("[START] Broker connection successful")
+
+log.info("[START] Running with the following settings:")
+log.info("[START] Input: {}".format(INPUT_FILE))
+log.info("[START] Name: {}".format(MY_ID))
+log.info("[START] Motion Threshold: {}".format(MOTION_THRESHOLD))
+log.info("[START] Record Video: {}".format(RECORD_VIDEO))
+log.info("[START] Draw Face Boxes: {}".format(DRAW_FACE_BOXES))
+log.info("[START] Training Mode: {}".format(TRAINING_MODE))
+log.info("[START] Motion Min Area: {}".format(MIN_MOTION_AREA))
+log.info("[START] Motion Max Area: {}".format(MAX_MOTION_AREA))
 
 # Methods
 def captureSnapshot(frame, person, proba, name, nowDateTime, PATH):
@@ -99,6 +123,66 @@ def captureTrainingImage(frame, startX, startY, endX, endY, proba, name, PATH=No
         log.exception("[TRAINING] Failed to write image {} - {}".format(imageName, e))
         log.error("({}x,{}y) - ({}x,{}y) {} {}".format(startX, startY, endX, endY, proba, name))
 
+def sendPing():
+    message = {
+        "id": MY_ID,
+        "event": "ping",
+    }
+    message = utilities.encodeMessage(message)
+    ret = client.publish("/data", message)
+
+def sendInit():
+    message = {
+        "id": MY_ID,
+        "event": "initialised",
+    }
+    message = utilities.encodeMessage(message)
+    ret = client.publish("/data", message)
+
+def sendMotionDetected(motion):
+    message = {
+        "id": MY_ID,
+        "event": "motion_detected",
+        "motion": motion,
+    }
+    message = utilities.encodeMessage(message)
+    ret = client.publish("/data", message)
+
+def sendCaptureStart(file):
+    message = {
+        "id": MY_ID,
+        "event": "capture_start",
+        "filename": file,
+    }
+    message = utilities.encodeMessage(message)
+    ret = client.publish("/data", message)
+
+def sendCaptureStop(out, file):
+    if out is None:
+        return
+    message = {
+        "id": MY_ID,
+        "event": "capture_stop",
+        "filename": file,
+    }
+    message = utilities.encodeMessage(message)
+    ret = client.publish("/data", message)
+
+def sendDetectionToMQTT(frame, detections, filename, offsetX=0, offsetY=0):
+    global client
+    message = {
+        "id": MY_ID,
+        "event": "detections",
+        "detections": detections[1].tolist(),
+        "frame": utilities.encodeImage(frame),
+        "offsetX": offsetX,
+        "offsetY": offsetY,
+        "filename": filename,
+    }
+
+    message = utilities.encodeMessage(message)
+    ret = client.publish("/data", message)
+
 # This will be put into it's own worker which reads from a queue.
 def handleDetections(frame, detections, embedder, recognizer, le, sourceFrame=None, offsetX=0, offsetY=0):
     global peopleConfig
@@ -123,9 +207,7 @@ def handleDetections(frame, detections, embedder, recognizer, le, sourceFrame=No
 # load serialized face detector
 
 log.info("[WAIT] Loading Face Detector...")
-protoPath = "face_detection_model/deploy.prototxt"
-modelPath = "face_detection_model/res10_300x300_ssd_iter_140000.caffemodel"
-# detector = cv2.dnn.readNetFromCaffe(protoPath, modelPath)
+
 detector = cv2.FaceDetectorYN.create(
     "face_detection_model/face_detection_yunet_2023mar.onnx",
     "",
@@ -135,27 +217,30 @@ detector = cv2.FaceDetectorYN.create(
     5000
 )
 
-# load serialized face embedding model
-log.info("[WAIT] Loading Face Recognizer...")
-embedder = cv2.dnn.readNetFromTorch("openface_nn4.small2.v1.t7")
-
-# load the actual face recognition model along with the label encoder
-recognizer = pickle.loads(open("output/recognizer.pickle", "rb").read())
-le = pickle.loads(open("output/le.pickle", "rb").read())
+sourceFPS=0
 
 # initialize the video stream, then allow the camera sensor to warm up
 log.info("[WAIT] Starting Video Stream...")
-
-vs = cv2.VideoCapture(INPUT_FILE, cv2.CAP_FFMPEG) # Kasa.
-vs.set(cv2.CAP_PROP_POS_MSEC, 1)
-
-time.sleep(2.0)
+try:
+    vs = cv2.VideoCapture(INPUT_FILE, cv2.CAP_FFMPEG) # Kasa.
+    vs.set(cv2.CAP_PROP_POS_MSEC, 1)
+    time.sleep(2.0)
+    sourceFPS = vs.get(cv2.CAP_PROP_FPS)
+    log.info("[WAIT] Video Stream FPS {}.".format(sourceFPS))
+    ret, frame = vs.read()
+    if ret == False:
+        log.error("[ERROR] Failed to read frame from video stream.")
+        exit(1)
+except Exception as e:
+    log.exception("[ERROR] Failed to open video stream {}".format(e))
+    exit(1)
 
 # start the FPS throughput estimator
 fps = FPS().start()
 log.info("[READY] Video Stream Started.")
 out = None
-# loop over frames from the video file stream
+currentVideoFilename = ""
+
 peopleConfig = json.load(open("dataset/config.json"))
 peopleFound = {}
 motionSignatures = {}
@@ -166,7 +251,10 @@ trainingImagesCaptured=0
 frameCounter=0
 motionBg=None
 executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
+sendInit()
+lastPing = time.time()
 
+# loop over frames from the video file stream
 while vs.isOpened():
     # grab the frame from the threaded video stream
     ret, frame = vs.read()
@@ -179,15 +267,24 @@ while vs.isOpened():
     frameCounter += 1
     motion = getMotion(frame)
 
+    if lastPing < (time.time() - 30): # Every 30 seconds.
+        sendPing()
+        lastPing = time.time()
+
     if frameCounter % (5 * 60 * 30) == 1: # Every 5 minutes.
         mp.resetBackground()
         frameCounter = 0
 
     if mp.isMotionDetectedIn(motion) == False:
         if time.time() > timeoutMotion:
+            sendCaptureStop(out, currentVideoFilename)
             out = video.stopRecording(out, RECORD_VIDEO)
     else:
-        out = video.startRecording("{}-Activity-{}".format(MY_ID, datetime.datetime.now().strftime("%Y%m%d%H%M%S")), out, INPUT_WIDTH, INPUT_HEIGHT, RECORD_VIDEO)
+        (out, fn) = video.startRecording("Activity-{}".format(datetime.datetime.now().strftime("%Y%m%d%H%M%S")), out, INPUT_WIDTH, INPUT_HEIGHT, RECORD_VIDEO, MY_ID=MY_ID)
+        if fn != "":
+            currentVideoFilename = fn
+
+        sendCaptureStart(currentVideoFilename)
         timeoutMotion = time.time() + MOTION_TIMEOUT
 
     (h, w) = frame.shape[:2]
@@ -197,6 +294,7 @@ while vs.isOpened():
     if mp.isMotionDetectedIn(motion) == True:
     # Extract movement from frame.
         log.debug("[MOTION] Motion detected.")
+        sendMotionDetected(motion)
         validMotion = 0
         for idx, m in enumerate(motion):
             movementFrame = frame.copy()
@@ -215,15 +313,15 @@ while vs.isOpened():
             detections = fr.getDetectedFaces(detector, detectFrame)
             if detections[1] is not None:
                 log.debug("Detected {} faces with motion.".format(len(detections[1])))
-                executor.submit(handleDetections, frame, detections, embedder, recognizer, le)
-                # handleDetections(frame, detections, embedder, recognizer, le)
+                sendDetectionToMQTT(frame, detections, currentVideoFilename)
+
     elif (out is not None): # If we are recording, but haven't detected active motion in this frame, still run face detection.
         # apply OpenCV's deep learning-based face detector to localize faces in the input image
         detectFrame = imutils.resize(frame, width=quaterWidth, height=quaterHeight)
         detections = fr.getDetectedFaces(detector, detectFrame)
         if detections[1] is not None:
             log.debug("Detected {} faces without motion.".format(len(detections[1])))
-            executor.submit(handleDetections, frame, detections, embedder, recognizer, le)
+            sendDetectionToMQTT(frame, detections, currentVideoFilename)
 
     # update the FPS counter
     fps.update()

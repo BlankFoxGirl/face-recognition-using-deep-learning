@@ -44,3 +44,24 @@ services:
     restart: unless-stopped
     volumes:
       - ./:/app:rw
+    depends_on:
+      - camera2
+      - camera3
+      - camera4
+      - mqtt
+  mqtt: # No Persistence
+    image: toke/mosquitto
+    container_name: mqtt
+    restart: unless-stopped
+    ports:
+      - 1883:1883
+      - 9001:9001
+  worker:
+    image: face-recognition
+    container_name: worker
+    command: python /app/worker.py
+    restart: unless-stopped
+    volumes:
+      - ./:/app:rw
+    depends_on:
+      - mqtt

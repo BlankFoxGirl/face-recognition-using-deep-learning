@@ -1,4 +1,4 @@
-import os
+import os, base64, json, numpy as np, cv2
 def slugToName(slug):
     return slug.replace("-", " ").title()
 
@@ -31,3 +31,29 @@ def createRecursivePath(path):
     if not os.path.exists(path):
         os.makedirs(path)
     return path
+
+
+# Wraps base64.b64encode with ascii decoding.
+def encodeImage(image):
+    retval, buffer = cv2.imencode('.jpg', image)
+    return base64.b64encode(buffer).decode('ascii')
+
+# Wraps base64.b64decode
+def decodeImage(image):
+    # nparr = np.fromstring(base64.b64decode(image), np.uint8)
+    # nparr = np.asarray(base64.b64decode(image), dtype="uint8") 
+    nparr = np.frombuffer(base64.b64decode(image), np.uint8)
+    return cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+# Wraps json.dumps
+def encodeMessage(message):
+    return json.dumps(message)
+
+# Wraps json.loads
+def decodeMessage(message):
+    return json.loads(message)
+
+def getPathWithoutFile(filename):
+    path = filename.split("/")
+    path.pop()
+    return "/".join(path) + "/"

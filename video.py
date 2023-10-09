@@ -3,15 +3,20 @@ import cv2, datetime, utilities, quadrants
 videoMaxLength = 3 * 60 * 30 # 3 minutes @ 30 FPS.
 videoLength = 0
 
-def startRecording(name, out, INPUT_WIDTH=1920, INPUT_HEIGHT=1080, RECORD_VIDEO=True):
-    if out is not None or RECORD_VIDEO == False:
-        return out
-    fourcc = cv2.VideoWriter_fourcc(*'XVID')
+def startRecording(name, out, INPUT_WIDTH=1920, INPUT_HEIGHT=1080, RECORD_VIDEO=True, MY_ID="Camera"):
     now = datetime.datetime.now()
-    p = utilities.createRecursivePath("captured/{}/{}/{}/{}/{}".format(now.strftime("%Y"), now.strftime("%m"), now.strftime("%d"), now.strftime("%H"), now.strftime("%M")))
+    if out is not None or RECORD_VIDEO == False:
+        if RECORD_VIDEO == False:
+            p = utilities.createRecursivePath("captured/{}/{}/{}/{}/{}".format(MY_ID, now.strftime("%Y"), now.strftime("%m"), now.strftime("%d"), now.strftime("%H"), now.strftime("%M")))
+            currentVideoFilename = "{}/{}.avi".format(p, name)
+            return (out, currentVideoFilename)
+        return (out, "")
+    fourcc = cv2.VideoWriter_fourcc(*'XVID')
+    p = utilities.createRecursivePath("captured/{}/{}/{}/{}/{}".format(MY_ID, now.strftime("%Y"), now.strftime("%m"), now.strftime("%d"), now.strftime("%H"), now.strftime("%M")))
+    currentVideoFilename = "{}/{}.avi".format(p, name)
     out = cv2.VideoWriter("{}/{}.avi".format(p, name),fourcc, 20.0, (INPUT_WIDTH,INPUT_HEIGHT))
     log.info("[CAPTURE] Recording to file: {}/{}.avi".format(p, name))
-    return out
+    return (out, currentVideoFilename)
 
 def stopRecording(out, RECORD_VIDEO=True):
     if out is None or RECORD_VIDEO == False:

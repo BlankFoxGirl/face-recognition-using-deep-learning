@@ -11,12 +11,13 @@ def getRecognisedFaces(
         embedder,
         recognizer,
         le,
-        peopleConfig,
+        peopleConfig = {},
         offsetX=0,
         offsetY=0,
         MIN_FACE_WIDTH=20,
         MIN_FACE_HEIGHT=20,
-        UP_SAMPLE_MULTIPLIER=1
+        UP_SAMPLE_MULTIPLIER=1,
+        ZONE=""
     ):
     recognisedFaces = []
     if detections[1] is None:
@@ -66,7 +67,7 @@ def getRecognisedFaces(
         if (name == 'not-a-face'):
             continue
 
-        if (name in peopleConfig["people"]):
+        if ("people" in peopleConfig and name in peopleConfig["people"]):
             if proba < peopleConfig["people"][name]["required-probability"]:
                 log.debug("Probability {} less than {} for {}".format(proba, peopleConfig["people"][name]["required-probability"], name))
                 if proba < peopleConfig["people"][name]["training.ignore.threashold"]:
@@ -92,7 +93,8 @@ def getRecognisedFaces(
             "moveY": offsetY,
             "endMoveX": offsetX + mW,
             "endMoveY": offsetY + mH,
-            "detected": time.time()
+            "detected": time.time(),
+            "zone": ZONE
         })
 
     return recognisedFaces
