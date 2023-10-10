@@ -1,4 +1,7 @@
 #!/usr/local/bin/python
+'''
+NOT IN USE.
+'''
 # import libraries
 from imutils import paths
 import numpy as np

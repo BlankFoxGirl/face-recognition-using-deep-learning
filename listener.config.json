@@ -24,7 +24,7 @@
             "learning": true,
             "fps.limit": 60,
             "motion.sensitivity": 5000,
-            "motion.threshold": 80,
+            "motion.threshold": 30,
             "motion.area.minimum": 1000,
             "motion.area.maximum": 4000
         },
@@ -38,7 +38,7 @@
             "learning": true,
             "fps.limit": 60,
             "motion.sensitivity": 5000,
-            "motion.threshold": 80,
+            "motion.threshold": 30,
             "motion.area.minimum": 1000,
             "motion.area.maximum": 10000
         },
@@ -52,8 +52,8 @@
             "learning": true,
             "fps.limit": 60,
             "motion.sensitivity": 2000,
-            "motion.threshold": 80,
-            "motion.area.minimum": 1500,
+            "motion.threshold": 35,
+            "motion.area.minimum": 600,
             "motion.area.maximum": 5000
         }
     ]

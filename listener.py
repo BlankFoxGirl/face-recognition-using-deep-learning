@@ -6,6 +6,8 @@ PROCESS_FILE="/app/recognise_video_phase1.py"
 
 running = True
 
+log.setId("Listener")
+
 def startCamera(camera):
     global listenerProcesses
     cameraName = camera["name"]
@@ -32,7 +34,7 @@ def startCamera(camera):
         '--motion-max-area',
         str(camera["motion.area.maximum"]),
     ]
-    log.info("Starting camera {} with command `{}`".format(cameraName, " ".join(args)))
+    log.debug("Starting camera {} with command `{}`".format(cameraName, " ".join(args)))
     cameraProcess = subprocess.Popen(args)
     listenerProcesses[cameraName] = cameraProcess
 
@@ -47,4 +49,4 @@ while running == True:
     time.sleep(5)
     startCameras(config)
 
-log.info("Listener end")
+log.info("[END] Listener end")

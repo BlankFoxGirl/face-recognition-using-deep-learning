@@ -3,6 +3,8 @@ import numpy as np
 
 motionBg=None
 MOTION_SENSITIVITY=10000
+USE_V2_MOTION_DETECTION=True
+DEBUG_FRAME=False
 lastFrame=None
 
 def setMotionSensitivity(sensitivity):
@@ -41,7 +43,7 @@ def getSignatureFrame(frame, firstFrame):
 
     if len(signatures) > 0:
         groups = formatSignatureBlocksIntoSignatureGroups(signatures)
-        log.debug(formatSignatureGroupsIntoAverageColoursAndCoords(groups))
+        log.debug("Signatures Dump", DUMP=formatSignatureGroupsIntoAverageColoursAndCoords(groups))
 
     return imutils.resize(small, width=1920, height=1080)
 
@@ -124,46 +126,49 @@ def getGrey(frame):
     # Converting color image to gray_scale image
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
   
-    # Converting gray scale image to GaussianBlur 
-    # so that change can be find easily
-    gray = cv2.GaussianBlur(gray, (21, 21), 0)
+    # Converting gray scale image to blur 
+    # so that change can be found easily
+    gray = cv2.blur(gray, (5, 5))
+
     return gray
 
-def getMotion(frame, motionBg, sensitivity=MOTION_SENSITIVITY, MIN_MOTION_AREA=5, MAX_MOTION_AREA=10, threshold=30, CONTAINER_PADDING=20):
-    global lastFrame
+def getMotion(frame, motionBg=None, sensitivity=MOTION_SENSITIVITY, MIN_MOTION_AREA=5, MAX_MOTION_AREA=10, threshold=30, MOTION_THRESHOLD=30, CONTAINER_PADDING=20):
+    if sensitivity != MOTION_SENSITIVITY:
+        log.warning("Argument sensitivity in getMotion is no longer used. Please use MIN_MOTION_AREA and MAX_MOTION_AREA instead.", ["DEPRECATED"])
+    if threshold != 30:
+        log.warning("Argument threshold in getMotion is deprecated. Please use MOTION_THRESHOLD instead.", ["DEPRECATED"])
+        MOTION_THRESHOLD=threshold
+
+    if USE_V2_MOTION_DETECTION == True:
+        if motionBg is not None:
+            log.warning("Argument motionBg in getMotion is deprecated and no longer used in V2 Motion Detection.", ["DEPRECATED"])
+        return getMotionV2(frame, MIN_MOTION_AREA, MAX_MOTION_AREA, MOTION_THRESHOLD, CONTAINER_PADDING)
+
+    return getMotionV1(frame, motionBg, MIN_MOTION_AREA, MAX_MOTION_AREA, MOTION_THRESHOLD, CONTAINER_PADDING)
+
+def getMotionV1(frame, motionBg, MIN_MOTION_AREA=5, MAX_MOTION_AREA=10, MOTION_THRESHOLD=30, CONTAINER_PADDING=20):
     # Initializing motion (no motion)
     motion = []
 
     # Converting color image to gray_scale image
     gray = getGrey(frame)
-    (fH, fW) = gray.shape[:2]
 
-    frame = imutils.resize(frame, width=fW, height=fH)
-  
     # In first iteration we assign the value 
     # of static_back to our first frame
     if motionBg is None:
         motionBg = gray
         log.debug("BG SET")
         return motion
-  
+
     # Difference between static background 
     # and current frame(which is GaussianBlur)
     diff_frame = cv2.absdiff(motionBg, gray)
   
     # If change in between static background and
     # current frame is greater than 30 it will show white color(255)
-    thresh_frame = cv2.threshold(diff_frame, threshold, 255, cv2.THRESH_BINARY)[1]
+    thresh_frame = cv2.threshold(diff_frame, MOTION_THRESHOLD, 255, cv2.THRESH_BINARY)[1]
     thresh_frame = cv2.dilate(thresh_frame, None, iterations = 1)
 
-    # if lastFrame is not None:
-    #     thresh_frame = cv2.absdiff(lastFrame, thresh_frame)
-
-    # lastFrame = thresh_frame
-
-    # cv2.imwrite("captured/{}-diff.jpg".format(time.time()), diff_frame)
-    # cv2.imwrite("captured/{}-threashold.jpg".format(time.time()), thresh_frame)
-  
     # Finding contour of moving object
     cnts,_ = cv2.findContours(thresh_frame.copy(),
              cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -181,6 +186,58 @@ def getMotion(frame, motionBg, sensitivity=MOTION_SENSITIVITY, MIN_MOTION_AREA=5
             "endY": y + h + CONTAINER_PADDING,
         })
 
+    return motion
+
+def getMotionV2(frame, MIN_MOTION_AREA=5, MAX_MOTION_AREA=10, MOTION_THRESHOLD=30, CONTAINER_PADDING=20):
+    global lastFrame
+    # Subtract the current frame from the last frame. lastFrame
+    # Initializing motion (no motion)
+    motion = []
+
+    # Converting color image to gray_scale image
+    gray = getGrey(frame)
+
+    # In first iteration we assign the value 
+    # of static_back to our first frame
+    if lastFrame is None:
+        lastFrame = gray
+        log.debug("BG SET")
+        return motion
+
+    # Difference between static background 
+    # and current frame(which is blurred)
+    diff_frame = cv2.absdiff(lastFrame, gray)
+
+    # If change in between static background and
+    # current frame is greater than 30 it will show white color(255)
+    thresh_frame = cv2.threshold(diff_frame, MOTION_THRESHOLD, 255, cv2.THRESH_BINARY)[1]
+    thresh_frame = cv2.dilate(thresh_frame, None, iterations = 1)
+
+    # Finding contour of moving object
+    cnts,_ = cv2.findContours(thresh_frame.copy(),
+             cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    for contour in cnts:
+        if cv2.contourArea(contour) < MIN_MOTION_AREA or cv2.contourArea(contour) > MAX_MOTION_AREA:
+            continue
+
+        log.debug("Motion detected with area {}".format(cv2.contourArea(contour)))
+        (x, y, w, h) = cv2.boundingRect(contour)
+        motion.append({
+            "startX": max(x - CONTAINER_PADDING, 0),
+            "startY": max(y - CONTAINER_PADDING, 0),
+            "endX": x + w + CONTAINER_PADDING,
+            "endY": y + h + CONTAINER_PADDING,
+        })
+
+    if len(motion) > 0 and DEBUG_FRAME == True:
+        cv2.imwrite("captured/debug_last_{}.jpg".format(time.time()), lastFrame)
+        cv2.imwrite("captured/debug_curr_{}.jpg".format(time.time()), gray)
+        cv2.imwrite("captured/debug_diff_{}.jpg".format(time.time()), diff_frame)
+        cv2.imwrite("captured/debug_thre_{}.jpg".format(time.time()), thresh_frame)
+
+    # Update lastFrame with the current gray grabbed frame.
+    lastFrame = gray
     return motion
 
 def getArea(w, h):

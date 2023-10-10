@@ -1,0 +1,8 @@
+MOTION="motion_detected"
+DETECTION="detections"
+PING="ping"
+PONG="pong"
+FACE_RECOGNISED="face_recognised"
+CAMERA_INITIALISED="initialised"
+RECORDING_STARTED="capture_start"
+RECORDING_STOPPED="capture_stop"

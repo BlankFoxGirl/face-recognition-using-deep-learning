@@ -15,7 +15,7 @@ def startRecording(name, out, INPUT_WIDTH=1920, INPUT_HEIGHT=1080, RECORD_VIDEO=
     p = utilities.createRecursivePath("captured/{}/{}/{}/{}/{}".format(MY_ID, now.strftime("%Y"), now.strftime("%m"), now.strftime("%d"), now.strftime("%H"), now.strftime("%M")))
     currentVideoFilename = "{}/{}.avi".format(p, name)
     out = cv2.VideoWriter("{}/{}.avi".format(p, name),fourcc, 20.0, (INPUT_WIDTH,INPUT_HEIGHT))
-    log.info("[CAPTURE] Recording to file: {}/{}.avi".format(p, name))
+    log.info("Recording to file: {}/{}.avi".format(p, name), ["CAPTURE"])
     return (out, currentVideoFilename)
 
 def stopRecording(out, RECORD_VIDEO=True):
@@ -24,7 +24,7 @@ def stopRecording(out, RECORD_VIDEO=True):
     out.release()
     del out
     out = None
-    log.info("[CAPTURE] Stopped recording.")
+    log.info("Stopped recording.", ["CAPTURE"])
     return out
 
 def writeFrame(frame, motion, out, motionSignatures, RECORD_VIDEO=True, DRAW_FACE_BOXES=True, IDENTITY_FRAME_HITS=5, PEOPLE_CONFIG={}):

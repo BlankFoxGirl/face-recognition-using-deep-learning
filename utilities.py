@@ -1,4 +1,4 @@
-import os, base64, json, numpy as np, cv2
+import os, base64, json, numpy as np, cv2, time
 def slugToName(slug):
     return slug.replace("-", " ").title()
 
@@ -40,13 +40,12 @@ def encodeImage(image):
 
 # Wraps base64.b64decode
 def decodeImage(image):
-    # nparr = np.fromstring(base64.b64decode(image), np.uint8)
-    # nparr = np.asarray(base64.b64decode(image), dtype="uint8") 
     nparr = np.frombuffer(base64.b64decode(image), np.uint8)
     return cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
 # Wraps json.dumps
 def encodeMessage(message):
+    message["sent"] = time.time()
     return json.dumps(message)
 
 # Wraps json.loads

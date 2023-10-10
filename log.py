@@ -6,29 +6,60 @@ def setId(newId):
     global id
     id=newId
 
-def write(m):
+def write(m, ANSI="", DUMP=None):
     global id
-    print("[{}.{}]{}".format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), id, m))
+    print(ANSI + "[{}.{}]{}\033[0m".format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), id, m))
+    printDump(DUMP, ANSI=ANSI)
     sys.stdout.flush()
 
-def debug(m):
+def printDump(dump = None, ANSI=""):
+    if dump is None:
+        return
+
+    if ANSI != "":
+        print(ANSI)
+
+    print(dump)
+
+    if ANSI != "":
+        print("\033[0m") # Reset output.
+
+def condenseAppend(append):
+    resp = ""
+    if len(append) == 0:
+        return resp
+    for item in append:
+        resp += "[{}]".format(item)
+    return resp
+
+def debug(m, APPEND=[], DUMP=None):
     if DEBUG == True:
-        write("[DEBUG]{}".format(m))
+        ansi="\033[1;37;40m"
+        write("[DEBUG]{} {}".format(condenseAppend(APPEND), m), ANSI=ansi, DUMP=DUMP)
 
-def info (m):
-    write("[INFO]{}".format(m))
+def info (m, APPEND=[], DUMP=None):
+    write("[INFO]{} {}".format(condenseAppend(APPEND), m))
+    printDump(DUMP)
 
-def error(m):
-    write("[ERROR]{}".format(m))
+def success (m, APPEND=[], DUMP=None):
+    color="\033[1;32;40m"
+    write("[SUCCESS]{} {}".format(condenseAppend(APPEND), m), ANSI=color, DUMP=DUMP)
 
-def warning(m):
-    write("[WARNING]{}".format(m))
+def error(m, APPEND=[], DUMP=None):
+    color = "\033[1;31;40m"
+    write("[ERROR]{} {}".format(condenseAppend(APPEND), m), ANSI=color, DUMP=DUMP)
 
-def critical(m):
-    write("[CRITICAL]{}".format(m))
+def warning(m, APPEND=[], DUMP=None):
+    color = "\033[1;33;40m"
+    write("[WARNING]{} {}".format(condenseAppend(APPEND), m), ANSI=color, DUMP=DUMP)
 
-def exception(m):
-    write("[EXCEPTION]{}".format(m))
+def critical(m, APPEND=[], DUMP=None):
+    ansi = "\033[5m\033[1;35;40m"
+    write("[CRITICAL]{} {}".format(condenseAppend(APPEND), m), ANSI=ansi, DUMP=DUMP)
 
-def log(m):
-    write("[LOG]{}".format(m))
+def exception(m, APPEND=[], DUMP=None):
+    color = "\033[0;30;47m"
+    write("[EXCEPTION]{} {}".format(condenseAppend(APPEND), m), ANSI=color, DUMP=DUMP)
+
+def log(m, APPEND=[], DUMP=None):
+    write("[LOG]{}{}".format(condenseAppend(APPEND), m), DUMP=DUMP)

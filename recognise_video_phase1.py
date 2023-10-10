@@ -14,6 +14,7 @@ import face_recogniser as fr
 from imutils.video import FPS
 import concurrent.futures
 import paho.mqtt.client as paho
+import events as ev
 
 ACCURACY_THREASHOLD=0.98
 COMPARE_SIZE=100
@@ -64,24 +65,23 @@ broker="mqtt"
 port=1883
 
 def on_publish(client, userdata, result):
-    # print(userdata)
-    log.debug("Data published.")
+    log.debug("Data published.", DUMP={result,userdata}, APPEND=["MQTT"])
 
 client= paho.Client(MY_ID)
 client.on_publish = on_publish
-log.info("[START] Connecting to broker {}:{}".format(broker,port))
+log.info("Connecting to broker {}:{}".format(broker,port), ["START"])
 client.connect(broker, port)
-log.info("[START] Broker connection successful")
+log.info("Broker connection successful", ["START"])
 
-log.info("[START] Running with the following settings:")
-log.info("[START] Input: {}".format(INPUT_FILE))
-log.info("[START] Name: {}".format(MY_ID))
-log.info("[START] Motion Threshold: {}".format(MOTION_THRESHOLD))
-log.info("[START] Record Video: {}".format(RECORD_VIDEO))
-log.info("[START] Draw Face Boxes: {}".format(DRAW_FACE_BOXES))
-log.info("[START] Training Mode: {}".format(TRAINING_MODE))
-log.info("[START] Motion Min Area: {}".format(MIN_MOTION_AREA))
-log.info("[START] Motion Max Area: {}".format(MAX_MOTION_AREA))
+log.info("Running with the following settings:", ["START"])
+log.info("Input: {}".format(INPUT_FILE), ["START"])
+log.info("Name: {}".format(MY_ID), ["START"])
+log.info("Motion Threshold: {}".format(MOTION_THRESHOLD), ["START"])
+log.info("Record Video: {}".format(RECORD_VIDEO), ["START"])
+log.info("Draw Face Boxes: {}".format(DRAW_FACE_BOXES), ["START"])
+log.info("Training Mode: {}".format(TRAINING_MODE), ["START"])
+log.info("Motion Min Area: {}".format(MIN_MOTION_AREA), ["START"])
+log.info("Motion Max Area: {}".format(MAX_MOTION_AREA), ["START"])
 
 # Methods
 def captureSnapshot(frame, person, proba, name, nowDateTime, PATH):
@@ -100,7 +100,7 @@ def getMotion(frame):
         motionBg = mp.getGrey(frame)
         return []
 
-    return mp.getMotion(frame, motionBg, MIN_MOTION_AREA=MIN_MOTION_AREA, MAX_MOTION_AREA=MAX_MOTION_AREA, threshold=MOTION_THRESHOLD, CONTAINER_PADDING=CONTAINER_PADDING)
+    return mp.getMotion(frame, MIN_MOTION_AREA=MIN_MOTION_AREA, MAX_MOTION_AREA=MAX_MOTION_AREA, MOTION_THRESHOLD=MOTION_THRESHOLD, CONTAINER_PADDING=CONTAINER_PADDING)
 
 def captureTrainingImage(frame, startX, startY, endX, endY, proba, name, PATH=None):
     if proba < 0.96 and CAPTURE_UNKNOWNS == False:
@@ -120,13 +120,13 @@ def captureTrainingImage(frame, startX, startY, endX, endY, proba, name, PATH=No
         imageName='{}/UNKN_{}_{}_{}_{}.jpg'.format(PATH, name, MY_ID, datetimeStamp, MY_ID, name, datetime.datetime.now().strftime("%Y%m%d%H%M%S"), proba * 10000)
         cv2.imwrite(imageName, extractionForTraining)
     except Exception as e:
-        log.exception("[TRAINING] Failed to write image {} - {}".format(imageName, e))
-        log.error("({}x,{}y) - ({}x,{}y) {} {}".format(startX, startY, endX, endY, proba, name))
+        log.exception("Failed to write image {} - {}".format(imageName, e), ["TRAINING"])
+        log.error("({}x,{}y) - ({}x,{}y) {} {}".format(startX, startY, endX, endY, proba, name), ["TRAINING"])
 
 def sendPing():
     message = {
         "id": MY_ID,
-        "event": "ping",
+        "event": ev.PING,
     }
     message = utilities.encodeMessage(message)
     ret = client.publish("/data", message)
@@ -134,7 +134,7 @@ def sendPing():
 def sendInit():
     message = {
         "id": MY_ID,
-        "event": "initialised",
+        "event": ev.CAMERA_INITIALISED,
     }
     message = utilities.encodeMessage(message)
     ret = client.publish("/data", message)
@@ -142,7 +142,7 @@ def sendInit():
 def sendMotionDetected(motion):
     message = {
         "id": MY_ID,
-        "event": "motion_detected",
+        "event": ev.MOTION,
         "motion": motion,
     }
     message = utilities.encodeMessage(message)
@@ -151,7 +151,7 @@ def sendMotionDetected(motion):
 def sendCaptureStart(file):
     message = {
         "id": MY_ID,
-        "event": "capture_start",
+        "event": ev.RECORDING_STARTED,
         "filename": file,
     }
     message = utilities.encodeMessage(message)
@@ -162,7 +162,7 @@ def sendCaptureStop(out, file):
         return
     message = {
         "id": MY_ID,
-        "event": "capture_stop",
+        "event": ev.RECORDING_STOPPED,
         "filename": file,
     }
     message = utilities.encodeMessage(message)
@@ -172,7 +172,7 @@ def sendDetectionToMQTT(frame, detections, filename, offsetX=0, offsetY=0):
     global client
     message = {
         "id": MY_ID,
-        "event": "detections",
+        "event": ev.DETECTION,
         "detections": detections[1].tolist(),
         "frame": utilities.encodeImage(frame),
         "offsetX": offsetX,
@@ -191,7 +191,7 @@ def handleDetections(frame, detections, embedder, recognizer, le, sourceFrame=No
     nowDateTime = now.strftime("%Y-%m-%d_%H-%M")
     p = utilities.createRecursivePath("captured/{}/{}/{}/{}/{}/{}".format(MY_ID, now.strftime("%Y"), now.strftime("%m"), now.strftime("%d"), now.strftime("%H"), now.strftime("%M")))
     # Loop through faces, if the face is below probability then capture training image otherwise write a meta file to the captured directory.
-    log.debug("Found {} faces".format(len(faces)))
+    log.debug("Found {} faces".format(len(faces)), ["FACE_DETECT"])
     for face in faces:
         fileName = '{}/{}_{}_{}.json'.format(p, MY_ID, face["name"], nowDateTime)
         if os.path.exists(fileName) == True:
@@ -206,7 +206,7 @@ def handleDetections(frame, detections, embedder, recognizer, le, sourceFrame=No
 
 # load serialized face detector
 
-log.info("[WAIT] Loading Face Detector...")
+log.info("Loading Face Detector...", ["WAIT"])
 
 detector = cv2.FaceDetectorYN.create(
     "face_detection_model/face_detection_yunet_2023mar.onnx",
@@ -220,24 +220,24 @@ detector = cv2.FaceDetectorYN.create(
 sourceFPS=0
 
 # initialize the video stream, then allow the camera sensor to warm up
-log.info("[WAIT] Starting Video Stream...")
+log.info("Starting Video Stream...", ["WAIT"])
 try:
     vs = cv2.VideoCapture(INPUT_FILE, cv2.CAP_FFMPEG) # Kasa.
     vs.set(cv2.CAP_PROP_POS_MSEC, 1)
     time.sleep(2.0)
     sourceFPS = vs.get(cv2.CAP_PROP_FPS)
-    log.info("[WAIT] Video Stream FPS {}.".format(sourceFPS))
+    log.info("Video Stream FPS {}.".format(sourceFPS), ["WAIT"])
     ret, frame = vs.read()
     if ret == False:
-        log.error("[ERROR] Failed to read frame from video stream.")
+        log.error("Failed to read frame from video stream.")
         exit(1)
 except Exception as e:
-    log.exception("[ERROR] Failed to open video stream {}".format(e))
+    log.exception("Failed to open video stream {}".format(e))
     exit(1)
 
 # start the FPS throughput estimator
 fps = FPS().start()
-log.info("[READY] Video Stream Started.")
+log.success("Video Stream Started.", ["READY"])
 out = None
 currentVideoFilename = ""
 
@@ -293,7 +293,7 @@ while vs.isOpened():
 
     if mp.isMotionDetectedIn(motion) == True:
     # Extract movement from frame.
-        log.debug("[MOTION] Motion detected.")
+        log.debug("Motion detected.", ["MOTION"])
         sendMotionDetected(motion)
         validMotion = 0
         for idx, m in enumerate(motion):
@@ -312,7 +312,7 @@ while vs.isOpened():
             detectFrame = imutils.resize(frame, width=quaterWidth, height=quaterHeight)
             detections = fr.getDetectedFaces(detector, detectFrame)
             if detections[1] is not None:
-                log.debug("Detected {} faces with motion.".format(len(detections[1])))
+                log.debug("Detected {} faces with motion.".format(len(detections[1])), ["DETECT"])
                 sendDetectionToMQTT(frame, detections, currentVideoFilename)
 
     elif (out is not None): # If we are recording, but haven't detected active motion in this frame, still run face detection.
@@ -320,7 +320,7 @@ while vs.isOpened():
         detectFrame = imutils.resize(frame, width=quaterWidth, height=quaterHeight)
         detections = fr.getDetectedFaces(detector, detectFrame)
         if detections[1] is not None:
-            log.debug("Detected {} faces without motion.".format(len(detections[1])))
+            log.debug("Detected {} faces without motion.".format(len(detections[1])), ["DETECT"])
             sendDetectionToMQTT(frame, detections, currentVideoFilename)
 
     # update the FPS counter
@@ -335,8 +335,8 @@ while vs.isOpened():
 
 # stop the timer and display FPS information
 fps.stop()
-log.info("[END] Elasped time: {:.2f}".format(fps.elapsed()))
-log.info("[END] Approx. FPS: {:.2f}".format(fps.fps()))
+log.info("Elasped time: {:.2f}".format(fps.elapsed()), ["END"])
+log.info("Approx. FPS: {:.2f}".format(fps.fps()), ["END"])
 
 # cleanup
 cv2.destroyAllWindows()

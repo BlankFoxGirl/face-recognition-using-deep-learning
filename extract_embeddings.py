@@ -6,24 +6,24 @@ import argparse
 import imutils
 import pickle
 import cv2
-import os
+import os, log
 
 COMPARE_SIZE=100
 PROCESS_AMOUNT=500
 RUN_FRESH=False
 
 # load serialized face detector
-print("Loading Face Detector...")
+log.info("Loading Face Detector...")
 protoPath = "face_detection_model/deploy.prototxt"
 modelPath = "face_detection_model/res10_300x300_ssd_iter_140000.caffemodel"
 detector = cv2.dnn.readNetFromCaffe(protoPath, modelPath)
 
 # load serialized face embedding model
-print("Loading Face Recognizer...")
+log.info("Loading Face Recognizer...")
 embedder = cv2.dnn.readNetFromTorch("openface_nn4.small2.v1.t7")
 
 # grab the paths to the input images in our dataset
-print("Quantifying Faces...")
+log.info("Quantifying Faces...")
 imagePaths = list(paths.list_images("dataset"))
 
 # initialize our lists of extracted facial embeddings and corresponding people names
@@ -36,7 +36,7 @@ data = pickle.loads(open("output/embeddings.pickle", "rb").read())
 
 if RUN_FRESH == True or data == None or "paths" not in data:
 	data = {"embeddings": [], "names": [], "paths": []}
-	print("Running fresh.")
+	log.info("Running fresh.")
 
 # initialize the total number of faces processed
 total = 0
@@ -59,7 +59,7 @@ for (i, imagePath) in enumerate(imagePaths):
 
 	# extract the person name from the image path
 	if (i%PROCESS_AMOUNT == 0):
-		print("Processing image {}/{}".format(i, len(imagePaths)))
+		log.info("Processing image {}/{}".format(i, len(imagePaths)))
 	name = imagePath.split(os.path.sep)[-2]
 
 	# load the image, resize it to have a width of 600 pixels (while maintaining the aspect ratio), and then grab the image dimensions
@@ -94,7 +94,7 @@ for (i, imagePath) in enumerate(imagePaths):
 
 			# ensure the face width and height are sufficiently large
 			if fW < 20 or fH < 20:
-				print("Face too small. {}W {}H - {}".format(fW, fH, imagePath))
+				log.warning("Face too small. {}W {}H - {}".format(fW, fH, imagePath))
 				os.remove(imagePath)
 				tooSmall += 1
 				continue
@@ -111,18 +111,18 @@ for (i, imagePath) in enumerate(imagePaths):
 			imageNames.append(imagePath)
 			total += 1
 		else:
-			print("Confidence too low. {} - {}".format(confidence, imagePath))
+			log.warning("Confidence too low. {} - {}".format(confidence, imagePath))
 			lowConfidence += 1
 			os.remove(imagePath)
 	else:
-		print("No faces found. {}".format(imagePath))
+		log.warning("No faces found. {}".format(imagePath))
 		noFace += 1
 		os.remove(imagePath)
 
 # dump the facial embeddings + names to disk
-print("[INFO] serializing {} encodings...".format(total))
+log.info("[INFO] serializing {} encodings...".format(total))
 data = {"embeddings": knownEmbeddings, "names": knownNames, "paths": imageNames}
 f = open("output/embeddings.pickle", "wb")
 f.write(pickle.dumps(data))
 f.close()
-print("[STATS] {} Missing Faces, {} Too Small, {} Low Confidence, {} Newly Processed, {} Total".format(noFace, tooSmall, lowConfidence, newProcessed, total))
+log.info("[STATS] {} Missing Faces, {} Too Small, {} Low Confidence, {} Newly Processed, {} Total".format(noFace, tooSmall, lowConfidence, newProcessed, total))
